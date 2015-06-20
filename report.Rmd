@@ -5,18 +5,102 @@ date: "06/18/2015"
 output: html_document
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r echo=FALSE}
+library(caret)
+library(doParallel)
+set.seed(1234)
+```
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# Background
+
+Using devices such as **Jawbone Up**, **Nike FuelBand**, and **Fitbit** it is now possible to collect a large amount
+of data about personal activity relatively inexpensively. These type of devices are part of the quantified self
+movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to
+find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify
+how much of a particular activity they do, but they rarely quantify how well they do it. In this project, we
+will use data from accelerometers on the
+
+* belt
+* forearm
+* arm and
+* dumbell
+
+of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways:
+
+1. sitting down
+2. standing up
+3. walking
+4. standing
+5. sitting
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har. 
+
+# Objective
+
+The goal is to predict the manner in which the 6 persons did the exercise. This is the *classe* variable in
+the training set. Moreover, the prediction model should be used to predict 20 different test cases.
+
+# Cleaning the Training Set
 
 ```{r}
-summary(cars)
+training_set <- read.csv("pml-training.csv", na.strings = c("", "NA", "#DIV/0!", '""'))
+testing_set  <- read.csv("pml-testing.csv",  na.strings = c("", "NA", "#DIV/0!", '""'))
+
+dim(training_set)
 ```
 
-You can also embed plots, for example:
+After looking to the content of the training data set, we proceed by
 
-```{r, echo=FALSE}
-plot(cars)
+1. Removing unused variables (i.e. data not needed to predict the *classe*)
+2. Remove variables with low variance
+3. Remove variables with all NA
+
+```{r}
+training_set <- training_set[, -grep("X|user_name|timestamp|new_window|num_window", names(training_set))]
+training_set <- training_set[, -nearZeroVar(training_set)]
+training_set <- training_set[, apply(training_set, 2, function(x) !any(is.na(x)))]
+
+dim(training_set)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Training
+
+Wefirst split the training set into two halves: the training subset and the training set
+
+```{r}
+index = createDataPartition(y = training_set$classe, p=0.5, list=FALSE)
+training_subset <- training_set[index,]
+testing_subset <- training_set [-index,]
+```
+
+Then we create the model
+
+1. processing the training subset
+2. using the *Random Forest* and
+3. running a five fold cross validation
+4. using the package *doParallel*.
+
+```{r}
+parallelCluster <- makeCluster(detectCores())
+registerDoParallel(parallelCluster)
+
+rf_model <- train(classe ~ .,
+                  data = training_subset,
+                  method = "rf",
+                  trControl = trainControl(method = "cv", number = 5, allowParallel = TRUE) )
+
+stopCluster(parallelCluster)
+```
+
+The resulting fial model is the following:
+
+```{r}
+rf_model$finalModel
+```
+
+with accuracy
+
+```{r}
+rf_model
+```
+
